@@ -14,6 +14,13 @@ Not affiliated with OpenAI.
 - English and Simplified Chinese; system, light, and dark appearance; glass, solid, or transparent backgrounds.
 - Quota and reset times from logs, with optional API-equivalent capacity estimates through ccusage.
 
+## Download
+
+Download the packaged app from [Releases](https://github.com/XYoungSky/CodexSpeed/releases/latest).
+The current binary supports Apple Silicon (arm64) on macOS 13+. Unzip it, drag `CodexSpeed.app`
+to Applications, and open it. The app is ad hoc signed and not notarized by Apple; the first launch
+may require allowing it in System Settings → Privacy & Security. For Intel Macs, build from source.
+
 ## Build and run
 
 Requires macOS 13+ to run. Building requires a Swift toolchain with the macOS 26+ SDK

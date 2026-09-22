@@ -13,6 +13,13 @@
 - 中英文界面，浅色 / 深色 / 跟随系统，以及玻璃、实色、透明背景。
 - 展示日志中的额度和重置时间；可配合 ccusage 估算 API 等价容量。
 
+## 下载
+
+在 [Releases](https://github.com/XYoungSky/CodexSpeed/releases/latest) 下载打包好的应用。
+当前提供 Apple Silicon（arm64）版本，支持 macOS 13+。解压后将 `CodexSpeed.app` 拖入“应用程序”并打开。
+应用采用本地临时签名，未经 Apple 公证；首次打开可能需要在“系统设置 → 隐私与安全性”中允许打开。
+Intel Mac 请从源码构建。
+
 ## 构建与运行
 
 运行需要 macOS 13+；源码构建需要带 macOS 26+ SDK 的 Swift 工具链

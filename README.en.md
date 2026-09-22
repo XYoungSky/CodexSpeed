@@ -46,12 +46,8 @@ or open Settings. Click the menu bar icon to restore the floating window.
 - **Speed:** estimated from recent log increments while running; after completion, total turn output tokens divided by duration, including tool execution and waiting.
 - **Quota:** based on log snapshots, which may be stale; no live server queries. Missing metrics appear as `—`.
 - **Log window:** files modified within the last 14 UTC calendar days, including active and archived sessions; reads are incremental after startup.
-- **Cost estimates (optional):** currently accepts only [ccusage](https://github.com/ccusage/ccusage) `20.0.20`. Set its executable path in Settings; the default is `/opt/homebrew/bin/ccusage`. Speed and logged quota remain available without ccusage.
+- **Cost estimates (optional):** uses [ccusage](https://github.com/ccusage/ccusage). Set its executable path in Settings; the default is `/opt/homebrew/bin/ccusage`. Speed and logged quota remain available without ccusage.
 - **Calibration:** requires at least 3 valid snapshots, a 10-minute span, and 5 percentage points of quota consumption. Resets or pricing changes restart sampling.
-
-The app explicitly checks the version: command arguments, JSON output, and pricing overrides have
-only been validated with `20.0.20`. Other versions are unverified, so cost estimation is paused;
-this does not establish that they are incompatible.
 
 Dollar amounts estimate API-equivalent capacity; **they are not a subscription balance or bill**.
 Usage on other devices, missing logs, model prices, and quota consumption weights can affect the results.
@@ -67,6 +63,8 @@ The app does not use App Sandbox; configure only a trusted ccusage executable.
 
 ```sh
 ./scripts/test.sh
+# Run integration checks against a specific ccusage installation
+CODEXSPEED_CCUSAGE=/path/to/ccusage ./scripts/test.sh --ccusage-only
 ```
 
 Tests run through the standalone `CoreChecks` executable target.

@@ -242,9 +242,104 @@ final class CoreTests {
     func testUnknownModelIsRejected() {
         expectThrows(try Pricing.validate(Data(#"{"daily":[{"models":{"future-model":{"totalTokens":100}}}]}"#.utf8)))
     }
+    // A fake CLI for exercising probe validation and cache invalidation, without subprocesses.
+    func compatibilityReport(_ home: URL) throws -> [String: Any] {
+        let data=try Data(contentsOf:home.appendingPathComponent("sessions/rollout-included.jsonl"))
+        let lines=try data.split(separator:10).map { try JSONSerialization.jsonObject(with:Data($0)) as! [String:Any] }
+        let model=(lines[1]["payload"] as! [String:Any])["model"] as! String
+        let settings=(lines[2]["payload"] as! [String:Any])["thread_settings"] as! [String:Any]
+        let info=(lines[3]["payload"] as! [String:Any])["info"] as! [String:Any]
+        let usage=info["total_token_usage"] as! [String:Int]
+        let input=usage["input_tokens"]!, cached=usage["cached_input_tokens"]!
+        let prices=["gpt-6-astra":(10.0,1.0,50.0),"gpt-5.6-sol":(4.0,0.4,20.0),
+                    "gpt-5.6-terra":(2.0,0.2,12.0),"gpt-5.6-luna":(0.2,0.02,1.2)]
+        let (standard,cache,output)=prices[model]!
+        let cost=(Double(input-cached)*standard+Double(cached)*cache+100*output)/1e6
+            * (settings["service_tier"] as? String == "priority" ? 2 : 1)
+        return ["totals":["costUSD":cost,"totalTokens":input+100],
+                "daily":[["date":"2026-09-21","costUSD":cost,
+                           "models":[model:["totalTokens":input+100,"cacheReadTokens":cached]]]]]
+    }
+    func testCompatibilityCacheAndCleanup() throws {
+        var calls=0, roots=[URL]()
+        let checker=CCUsageCompatibility(report: { _,home,since,timeout in
+            calls += 1; roots.append(home)
+            expectEqual(since,"2026-09-21")
+            expectTrue(timeout > 0 && timeout <= 5)
+            expectTrue(FileManager.default.fileExists(atPath:home.appendingPathComponent("sessions/rollout-excluded.jsonl").path))
+            return try JSONSerialization.data(withJSONObject:self.compatibilityReport(home))
+        })
+        try checker.verify(executable:"fixture",signature:"version-1")
+        expectEqual(calls,10)
+        try checker.verify(executable:"fixture",signature:"version-1")
+        expectEqual(calls,10)
+        try checker.verify(executable:"fixture",signature:"version-2")
+        expectEqual(calls,20)
+        expectTrue(roots.allSatisfy { !FileManager.default.fileExists(atPath:$0.path) })
+    }
+    func testCompatibilityRejectsInvalidReports() throws {
+        for mode in ["json","price","date","models","cache","empty","command"] {
+            var roots=[URL]()
+            let checker=CCUsageCompatibility(report: { _,home,_,_ in
+                roots.append(home)
+                if mode == "command" { throw TelemetryError.message("unsupported argument") }
+                if mode == "json" { return Data("invalid JSON".utf8) }
+                var report=try self.compatibilityReport(home)
+                if mode == "price" { report["totals"]=["costUSD":100] }
+                var days=report["daily"] as! [[String:Any]]
+                if mode == "date" { days[0]["date"]="2026-09-20" }
+                if mode == "models" { days[0]["models"]=[:] as [String:Any] }
+                if mode == "cache" { days[0]["models"]=["gpt-6-astra":["totalTokens":1100,"cacheReadTokens":0]] }
+                report["daily"]=mode == "empty" ? [] : days
+                return try JSONSerialization.data(withJSONObject:report)
+            })
+            expectThrows(try checker.verify(executable:"fixture",signature:"same"))
+            expectThrows(try checker.verify(executable:"fixture",signature:"same"))
+            expectEqual(roots.count,2) // Failed probes must never populate the success cache.
+            expectTrue(roots.allSatisfy { !FileManager.default.fileExists(atPath:$0.path) })
+        }
+    }
+    func testCompatibilityDeadline() throws {
+        var time=0.0, calls=0, roots=[URL](), timeouts=[TimeInterval]()
+        let checker=CCUsageCompatibility(clock:{ time }) { _,home,_,timeout in
+            roots.append(home); calls += 1; timeouts.append(timeout)
+            time += 4.5
+            return try JSONSerialization.data(withJSONObject:self.compatibilityReport(home))
+        }
+        expectThrows(try checker.verify(executable:"fixture",signature:"slow"))
+        expectEqual(calls,5)
+        expectEqual(timeouts.last,2)
+        expectTrue(roots.allSatisfy { !FileManager.default.fileExists(atPath:$0.path) })
+    }
+    func testMalformedPricingReports() {
+        for json in ["invalid","{}",#"{"daily":[{}]}"#,
+                     #"{"daily":[{"models":{"gpt-6-astra":{"totalTokens":true}}}]}"#,
+                     #"{"daily":[{"models":{"gpt-6-astra":{"totalTokens":-1}}}]}"#] {
+            expectThrows(try Pricing.validate(Data(json.utf8)))
+        }
+        for json in [
+            #"{"totals":{"costUSD":true,"totalTokens":0},"daily":[]}"#,
+            #"{"totals":{"costUSD":1,"totalTokens":0},"daily":[]}"#,
+            #"{"totals":{"costUSD":0,"totalTokens":0},"daily":[{"date":"bad","costUSD":0,"models":{}}]}"#,
+            #"{"totals":{"costUSD":0,"totalTokens":0},"daily":[{"date":"2026-09-21","costUSD":-1,"models":{}}]}"#,
+            #"{"totals":{"costUSD":1,"totalTokens":10},"daily":[{"date":"2026-09-21","costUSD":1,"models":{}}]}"#,
+            #"{"totals":{"costUSD":0,"totalTokens":0},"daily":[{"date":"2026-09-21","costUSD":0,"models":{}},{"date":"2026-09-21","costUSD":0,"models":{}}]}"#
+        ] { expectThrows(try CostReport.parse(Data(json.utf8))) }
+    }
     func testCCUsagePricingIntegration() throws {
-        let executable="/opt/homebrew/bin/ccusage"
+        let override=ProcessInfo.processInfo.environment["CODEXSPEED_CCUSAGE"]
+        let executable=override ?? "/opt/homebrew/bin/ccusage"
+        if override != nil && !FileManager.default.isExecutableFile(atPath:executable) {
+            throw TelemetryError.message("Configured test executable not found")
+        }
         guard FileManager.default.isExecutableFile(atPath:executable) else { print("SKIP ccusage integration: not installed"); return }
+        let version=String(decoding:try CommandRunner.run(path:executable,arguments:["--version"]),as:UTF8.self).trimmingCharacters(in:.whitespacesAndNewlines)
+        let checker=CCUsageCompatibility(), began=ProcessInfo.processInfo.systemUptime
+        try checker.verify(executable:executable,signature:version)
+        let cold=ProcessInfo.processInfo.systemUptime-began, cachedStart=ProcessInfo.processInfo.systemUptime
+        for _ in 0..<1000 { try checker.verify(executable:executable,signature:version) }
+        let cached=ProcessInfo.processInfo.systemUptime-cachedStart
+        print(String(format:"Compatibility %@: cold %.3f s; 1000 cached checks %.6f s",version,cold,cached))
         let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let sessions=root.appendingPathComponent("sessions")
         try FileManager.default.createDirectory(at:sessions,withIntermediateDirectories:true)
@@ -263,6 +358,22 @@ final class CoreTests {
                 expectTrue(abs(report.cost-expected*multiplier)<0.00000001)
             }
         }
+        // Exercise Monitor too, so a future version gate cannot bypass the probe tests.
+        let log=sessions.appendingPathComponent("rollout-fixture.jsonl")
+        let currentLog=try String(contentsOf:log,encoding:.utf8)
+            .replacingOccurrences(of:"2026-09-21",with:CostReport.dateString(Date()))
+        try currentLog.write(to:log,atomically:true,encoding:.utf8)
+        let monitor=Monitor(home:root,executable:executable,storage:root.appendingPathComponent("calibration.json"))
+        defer { monitor.stop() }
+        var finished: MonitorSnapshot?
+        monitor.tick { snapshot in
+            if snapshot.updated != nil || snapshot.costError != nil { finished=snapshot }
+        }
+        let deadline=Date().addingTimeInterval(20)
+        while finished == nil && Date()<deadline { RunLoop.current.run(until:Date().addingTimeInterval(0.01)) }
+        expectTrue(finished != nil)
+        expectNil(finished?.costError)
+        expectTrue(abs((finished?.cost ?? -1)-0.000568)<0.00000001)
     }
     func testQuotaExample() {
         var c=Calibration(limit:limit(30),cost:20,date:Date(timeIntervalSince1970:0))
@@ -313,7 +424,7 @@ final class CoreTests {
         expectEqual(p.malformed,1)
     }
     func testCostParsingAndFallback() throws {
-        let data=Data(#"{"totals":{"costUSD":12.5},"daily":[{"date":"2026-09-21","costUSD":12.5,"models":{"m":{"isFallback":true}}}]}"#.utf8)
+        let data=Data(#"{"totals":{"costUSD":12.5,"totalTokens":100},"daily":[{"date":"2026-09-21","costUSD":12.5,"models":{"m":{"isFallback":true,"totalTokens":100}}}]}"#.utf8)
         let r=try CostReport.parse(data); expectEqual(r.cost,12.5); expectTrue(r.fallback)
         expectThrows(try CostReport.parse(Data(#"{"totals":{},"daily":[]}"#.utf8)))
     }
@@ -333,6 +444,12 @@ final class CoreTests {
 
 @main struct Checks { static func main() throws {
 let tests=CoreTests()
+if CommandLine.arguments.contains("--ccusage-only") {
+    do { try tests.testCCUsagePricingIntegration() }
+    catch { print("FAIL ccusage integration: \(error.localizedDescription)"); exit(1) }
+    print("ccusage integration: \(failures) failed assertions")
+    exit(failures == 0 ? 0 : 1)
+}
 tests.testRecentSpeed(); print("PASS testRecentSpeed")
 tests.testLifecycleStatus(); print("PASS testLifecycleStatus")
 tests.testUnsafeNumbers(); print("PASS testUnsafeNumbers")
@@ -361,7 +478,11 @@ tests.testLatestSnapshotRemovesSecondary(); print("PASS testLatestSnapshotRemove
 tests.testMissingPriceZeroCost(); print("PASS testMissingPriceZeroCost")
 tests.testIndependentWindows(); print("PASS testIndependentWindows")
 tests.testUnknownModelIsRejected(); print("PASS testUnknownModelIsRejected")
+try tests.testCompatibilityCacheAndCleanup(); print("PASS testCompatibilityCacheAndCleanup")
+try tests.testCompatibilityRejectsInvalidReports(); print("PASS testCompatibilityRejectsInvalidReports")
+try tests.testCompatibilityDeadline(); print("PASS testCompatibilityDeadline")
+tests.testMalformedPricingReports(); print("PASS testMalformedPricingReports")
 try tests.testCCUsagePricingIntegration(); print("PASS testCCUsagePricingIntegration")
-print("29 checks; \(failures) failed assertions")
+print("33 checks; \(failures) failed assertions")
 if failures>0 { exit(1) }
 } }

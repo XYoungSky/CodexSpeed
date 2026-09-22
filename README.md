@@ -43,11 +43,8 @@ open dist/CodexSpeed.app
 - **速度**：运行时为近期日志增量估算；完成后为整轮输出 Token ÷ 耗时，包含工具执行和等待。
 - **额度**：来自日志快照，可能延迟；不是实时服务器查询。缺失指标显示 `—`。
 - **读取范围**：最近 14 个 UTC 自然日内修改过的日志，包含活动和归档目录；启动后增量读取。
-- **费用估算（可选）**：当前仅接受 [ccusage](https://github.com/ccusage/ccusage) `20.0.20`，在设置中指定其可执行文件，默认路径为 `/opt/homebrew/bin/ccusage`。未安装时仍可查看速度和日志额度。
+- **费用估算（可选）**：使用 [ccusage](https://github.com/ccusage/ccusage)，在设置中指定可执行文件，默认路径为 `/opt/homebrew/bin/ccusage`。未安装时仍可查看速度和日志额度。
 - **校准条件**：至少 3 个有效快照、10 分钟跨度、5 个百分点消耗；重置或价格变化后重新采样。
-
-版本限制是应用中的显式检查：目前仅验证了 `20.0.20` 的命令参数、JSON 输出和价格覆盖配置。
-其他版本尚未验证，费用估算会被暂停；这不表示其他版本一定不兼容。
 
 金额是 API 等价容量估算，**不是订阅余额或账单**。跨设备使用、日志缺失、模型价格和消耗权重都会影响结果。
 ccusage 以离线模式运行；价格快照位于 [Pricing.swift](Sources/CodexSpeedCore/Pricing.swift)，不会自动更新。
@@ -61,6 +58,8 @@ ccusage 以离线模式运行；价格快照位于 [Pricing.swift](Sources/Codex
 
 ```sh
 ./scripts/test.sh
+# 指定 ccusage 版本的安装路径，仅运行集成检查
+CODEXSPEED_CCUSAGE=/path/to/ccusage ./scripts/test.sh --ccusage-only
 ```
 
 测试使用独立的 `CoreChecks` 可执行目标；ccusage 集成检查在默认路径未安装 ccusage 时跳过。

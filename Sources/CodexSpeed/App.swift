@@ -47,7 +47,7 @@ final class HUDModel: ObservableObject {
     }
     func chooseExecutable() {
         let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.canChooseFiles=true; panel.directoryURL=URL(fileURLWithPath:"/opt/homebrew/bin")
-        panel.title=text("ccusage Executable", "ccusage 可执行文件"); panel.prompt=text("Select", "选择"); panel.message=text("Choose ccusage 20.0.20", "选择 ccusage 20.0.20")
+        panel.title=text("ccusage Executable", "ccusage 可执行文件"); panel.prompt=text("Select", "选择"); panel.message=text("Choose your ccusage executable", "选择 ccusage 可执行文件")
         if panel.runModal() == .OK,let url=panel.url { UserDefaults.standard.set(url.path,forKey:"ccusage"); restart(); monitor.reset(); tick() }
     }
     func reset() { monitor.reset(); tick() }

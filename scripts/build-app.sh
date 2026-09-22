@@ -10,6 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swift scripts/generate-icon.swift "$PWD/Assets"
 cp Assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp .build/release/CodexSpeed "$APP/Contents/MacOS/CodexSpeed.new"
+xcrun strip -S "$APP/Contents/MacOS/CodexSpeed.new"
 mv -f "$APP/Contents/MacOS/CodexSpeed.new" "$APP/Contents/MacOS/CodexSpeed"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,8 +21,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleName</key><string>CodexSpeed</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
-<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>1.1</string>
+<key>CFBundleVersion</key><string>2</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

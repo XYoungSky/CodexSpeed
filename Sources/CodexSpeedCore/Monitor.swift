@@ -26,6 +26,7 @@ public final class Monitor {
     private let storage: URL
     private let worker=DispatchQueue(label:"CodexSpeed.logs",qos:.utility)
     private let costWorker=DispatchQueue(label:"CodexSpeed.cost",qos:.utility)
+    private let compatibility=CCUsageCompatibility()
     private var generation=0
     private var stopped=false
     private let tickLock=NSLock()
@@ -159,8 +160,8 @@ public final class Monitor {
                 guard FileManager.default.isExecutableFile(atPath:executable) else { throw TelemetryError.message("找不到 ccusage；请在设置中指定可执行文件") }
                 guard !longContext else { throw TelemetryError.message("检测到超过 272K 的新模型请求；当前 ccusage 无法准确计价，暂停额度校准") }
                 let version=String(data:try CommandRunner.run(path:executable,arguments:["--version"],timeout:5),encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-                guard version == "20.0.20" || version == "ccusage 20.0.20" else { throw TelemetryError.message("ccusage 版本未适配：\(version)；需要 20.0.20") }
                 let sig=home.path+"|"+executable+"|"+version+"|"+Pricing.revision+"|"+self.priceSignature()
+                try self.compatibility.verify(executable:executable,signature:sig)
                 let data=try Pricing.report(executable:executable,home:home,since:since)
                 let report=try CostReport.parse(data)
                 let d=try JSONSerialization.jsonObject(with:data) as? [String:Any]

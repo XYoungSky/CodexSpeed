@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 public struct Calibration: Codable {
     public var limit: Limit
@@ -29,14 +30,45 @@ public struct CostReport {
     public var cost: Double
     public var fallback: Bool
     public var fingerprint: String
+    static func nonnegativeNumber(_ value: Any?) -> Double? {
+        guard let number=value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value=number.doubleValue
+        return value.isFinite && value>=0 ? value : nil
+    }
     public static func parse(_ data: Data) throws -> CostReport {
         guard let d=try JSONSerialization.jsonObject(with:data) as? [String:Any],
-              let totals=d["totals"] as? [String:Any], let cost=totals["costUSD"] as? Double,
-              cost.isFinite, cost>=0, let days=d["daily"] as? [[String:Any]] else { throw TelemetryError.message("ccusage JSON 格式不兼容或费用缺失") }
+              let totals=d["totals"] as? [String:Any], let cost=nonnegativeNumber(totals["costUSD"]),
+              let totalTokens=nonnegativeNumber(totals["totalTokens"]),
+              let days=d["daily"] as? [[String:Any]] else { throw TelemetryError.message("ccusage JSON 格式不兼容或费用缺失") }
+        var sum=0.0, modelTokens=0.0, dates=Set<String>()
+        let dateFormat=DateFormatter()
+        dateFormat.locale=Locale(identifier:"en_US_POSIX"); dateFormat.timeZone=TimeZone(secondsFromGMT:0)
+        dateFormat.dateFormat="yyyy-MM-dd"; dateFormat.isLenient=false
+        for day in days {
+            guard let date=day["date"] as? String, let parsedDate=dateFormat.date(from:date),
+                  dateFormat.string(from:parsedDate)==date, dates.insert(date).inserted,
+                  let amount=nonnegativeNumber(day["costUSD"]),
+                  let models=day["models"] as? [String:[String:Any]] else {
+                throw TelemetryError.message("ccusage JSON 日期或费用格式不兼容")
+            }
+            sum += amount
+            for usage in models.values {
+                guard let tokens=nonnegativeNumber(usage["totalTokens"]) else {
+                    throw TelemetryError.message("ccusage JSON 模型用量缺失")
+                }
+                modelTokens += tokens
+            }
+        }
+        guard sum.isFinite, abs(sum-cost)<=max(0.00000001,cost*0.00000001) else {
+            throw TelemetryError.message("ccusage JSON 费用汇总不一致")
+        }
+        guard modelTokens.isFinite, abs(modelTokens-totalTokens)<0.5 else {
+            throw TelemetryError.message("ccusage JSON 用量汇总不一致")
+        }
         let fallback=days.contains { day in
             (day["models"] as? [String:[String:Any]] ?? [:]).values.contains { $0["isFallback"] as? Bool == true }
         }
-        if (totals["totalTokens"] as? Double ?? 0)>0 && cost==0 {
+        if totalTokens>0 && cost==0 {
             throw TelemetryError.message("ccusage 有用量但费用为零，价格可能缺失；暂停额度估算")
         }
         // Closed days are stable: repricing or removed history invalidates calibration.

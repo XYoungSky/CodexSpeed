@@ -39,7 +39,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             ("未找到 Codex 日志", "Choose a Codex folder in Settings", "请在设置中选择 Codex 目录"),
             ("部分日志", "Some logs are unreadable", "部分日志无法读取"),
             ("找不到 ccusage", "Choose ccusage in Settings", "请在设置中选择 ccusage"),
-            ("ccusage 版本未适配", "ccusage 20.0.20 required", "需要 ccusage 20.0.20"),
+            ("ccusage 兼容性检查失败", "Update ccusage or choose a compatible executable", "请更新 ccusage 或选择兼容的可执行文件"),
             ("ccusage JSON", "Invalid ccusage report", "ccusage 报告格式异常"),
             ("ccusage 有用量", "Pricing unavailable", "价格数据不可用"),
             ("模型价格未验证", "Unverified model pricing", "模型价格尚未验证"),

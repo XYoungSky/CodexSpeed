@@ -17,20 +17,29 @@ public enum Pricing {
         return try! JSONSerialization.data(withJSONObject:["codex":["defaults":["pricingOverrides":overrides]]],options:[.sortedKeys,.prettyPrinted])
     }
     public static func validate(_ data: Data) throws {
-        guard let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] else { return }
+        guard let report=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any],
+              let days=report["daily"] as? [[String:Any]] else {
+            throw TelemetryError.message("ccusage JSON 格式不兼容或模型用量缺失")
+        }
         var unknown=Set<String>()
-        for day in report["daily"] as? [[String:Any]] ?? [] {
-            for (name,usage) in day["models"] as? [String:[String:Any]] ?? [:] {
-                if !supportedModels.contains(name), (usage["totalTokens"] as? Double ?? 0)>0 { unknown.insert(name) }
+        for day in days {
+            guard let models=day["models"] as? [String:[String:Any]] else {
+                throw TelemetryError.message("ccusage JSON 格式不兼容或模型用量缺失")
+            }
+            for (name,usage) in models {
+                guard let tokens=CostReport.nonnegativeNumber(usage["totalTokens"]) else {
+                    throw TelemetryError.message("ccusage JSON 格式不兼容或模型用量缺失")
+                }
+                if !supportedModels.contains(name), tokens>0 { unknown.insert(name) }
             }
         }
         if !unknown.isEmpty { throw TelemetryError.message("模型价格未验证："+unknown.sorted().joined(separator:", ")+"；暂停额度校准") }
     }
-    public static func report(executable: String, home: URL, since: String) throws -> Data {
+    public static func report(executable: String, home: URL, since: String, timeout: TimeInterval = 30) throws -> Data {
         let config=FileManager.default.temporaryDirectory.appendingPathComponent("codexspeed-pricing-\(UUID().uuidString).json")
         try configData.write(to:config,options:.atomic)
         defer { try? FileManager.default.removeItem(at:config) }
-        let data=try CommandRunner.run(path:executable,arguments:["codex","daily","--json","--offline","--speed","auto","--since",since,"--timezone","UTC","--config",config.path],environment:["CODEX_HOME":home.path])
+        let data=try CommandRunner.run(path:executable,arguments:["codex","daily","--json","--offline","--speed","auto","--since",since,"--timezone","UTC","--config",config.path],environment:["CODEX_HOME":home.path],timeout:timeout)
         try validate(data)
         return data
     }

@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+Assets/AppIcon.png
+Assets/AppIcon.icns
+Assets/AppIcon.iconset/
+.env
+.env.*
+*.log
+*.jsonl

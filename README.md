@@ -1,5 +1,7 @@
 # CodexSpeed
 
+**简体中文** | [English](README.en.md)
+
 一个轻量的 macOS 悬浮窗，用于查看 Codex 任务速度、用量和额度。
 只读本地日志，无需 API Key，不上传对话内容。非 OpenAI 官方项目。
 

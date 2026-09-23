@@ -1,5 +1,7 @@
 # CodexSpeed
 
+当前版本：**ver1.1.1**，新增 GPT-6 Sol 和 GPT-6 Luna 的费用估算支持。
+
 **简体中文** | [English](README.en.md)
 
 一个轻量的 macOS 悬浮窗，用于查看 Codex 任务速度、用量和额度。

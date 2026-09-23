@@ -239,6 +239,19 @@ final class CoreTests {
         a.add(limit:limit(40,600),cost:30,date:Date(timeIntervalSince1970:600))
         expectEqual(b.samples,1); expectEqual(b.limit.used,50); expectEqual(a.limit.used,40)
     }
+    func testGPT6SolAndLunaContextBoundary() throws {
+        for model in ["gpt-6-sol","gpt-6-luna"] {
+            try Pricing.validate(JSONSerialization.data(withJSONObject:
+                ["daily":[["models":[model:["totalTokens":100]]]]]))
+            for input in [272_000,272_001] {
+                let p=RolloutParser()
+                p.consume(event("turn_context",["turn_id":"a","model":model]))
+                p.consume(event("token_count",["info":["last_token_usage":["input_tokens":input,"output_tokens":100]]]))
+                expectEqual(p.session.model,model)
+                expectEqual(p.unsupportedPricingDate != nil,input>272_000)
+            }
+        }
+    }
     func testUnknownModelIsRejected() {
         expectThrows(try Pricing.validate(Data(#"{"daily":[{"models":{"future-model":{"totalTokens":100}}}]}"#.utf8)))
     }
@@ -251,7 +264,7 @@ final class CoreTests {
         let info=(lines[3]["payload"] as! [String:Any])["info"] as! [String:Any]
         let usage=info["total_token_usage"] as! [String:Int]
         let input=usage["input_tokens"]!, cached=usage["cached_input_tokens"]!
-        let prices=["gpt-6-astra":(10.0,1.0,50.0),"gpt-5.6-sol":(4.0,0.4,20.0),
+        let prices=["gpt-6-astra":(10.0,1.0,50.0),"gpt-6-sol":(2.0,0.2,10.0),"gpt-6-luna":(0.1,0.01,0.5),"gpt-5.6-sol":(4.0,0.4,20.0),
                     "gpt-5.6-terra":(2.0,0.2,12.0),"gpt-5.6-luna":(0.2,0.02,1.2)]
         let (standard,cache,output)=prices[model]!
         let cost=(Double(input-cached)*standard+Double(cached)*cache+100*output)/1e6
@@ -270,11 +283,11 @@ final class CoreTests {
             return try JSONSerialization.data(withJSONObject:self.compatibilityReport(home))
         })
         try checker.verify(executable:"fixture",signature:"version-1")
-        expectEqual(calls,10)
+        expectEqual(calls,18)
         try checker.verify(executable:"fixture",signature:"version-1")
-        expectEqual(calls,10)
+        expectEqual(calls,18)
         try checker.verify(executable:"fixture",signature:"version-2")
-        expectEqual(calls,20)
+        expectEqual(calls,36)
         expectTrue(roots.allSatisfy { !FileManager.default.fileExists(atPath:$0.path) })
     }
     func testCompatibilityRejectsInvalidReports() throws {
@@ -345,7 +358,7 @@ final class CoreTests {
         try FileManager.default.createDirectory(at:sessions,withIntermediateDirectories:true)
         defer { try? FileManager.default.removeItem(at:root) }
         let tokens:[String:Any]=["input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"reasoning_output_tokens":20,"total_tokens":1100]
-        for (model,expected) in [("gpt-6-astra",0.0132),("gpt-5.6-sol",0.00528),("gpt-5.6-terra",0.00284),("gpt-5.6-luna",0.000284)] {
+        for (model,expected) in [("gpt-6-astra",0.0132),("gpt-6-sol",0.00264),("gpt-6-luna",0.000132),("gpt-5.6-sol",0.00528),("gpt-5.6-terra",0.00284),("gpt-5.6-luna",0.000284)] {
             for (tier,multiplier) in [("default",1.0),("priority",2.0)] {
                 let lines=[event("session_meta",["id":"fixture","originator":"Codex Desktop","cli_version":"0.155.0","source":"vscode"]),
                     event("turn_context",["turn_id":"a","model":model]),
@@ -481,8 +494,9 @@ tests.testUnknownModelIsRejected(); print("PASS testUnknownModelIsRejected")
 try tests.testCompatibilityCacheAndCleanup(); print("PASS testCompatibilityCacheAndCleanup")
 try tests.testCompatibilityRejectsInvalidReports(); print("PASS testCompatibilityRejectsInvalidReports")
 try tests.testCompatibilityDeadline(); print("PASS testCompatibilityDeadline")
+try tests.testGPT6SolAndLunaContextBoundary(); print("PASS testGPT6SolAndLunaContextBoundary")
 tests.testMalformedPricingReports(); print("PASS testMalformedPricingReports")
 try tests.testCCUsagePricingIntegration(); print("PASS testCCUsagePricingIntegration")
-print("33 checks; \(failures) failed assertions")
+print("34 checks; \(failures) failed assertions")
 if failures>0 { exit(1) }
 } }

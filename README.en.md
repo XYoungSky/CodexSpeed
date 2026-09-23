@@ -1,5 +1,7 @@
 # CodexSpeed
 
+Current version: **ver1.1.1**, adding cost estimates for GPT-6 Sol and GPT-6 Luna.
+
 [简体中文](README.md) | **English**
 
 A lightweight macOS floating window for Codex task speed, token usage, and quota.

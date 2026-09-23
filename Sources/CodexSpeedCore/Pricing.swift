@@ -1,14 +1,14 @@
 import Foundation
 
-/// Snapshot verified 2026-09-22 against https://developers.openai.com/api/docs/pricing
+/// Snapshot verified 2026-09-23 against https://developers.openai.com/api/docs/pricing
 /// ccusage 20.0.20's offline catalog predates these models and silently prices them at zero.
 public enum Pricing {
-    public static let revision="openai-standard-2026-09-22-v1"
-    public static let modernModels: Set<String>=["gpt-6-astra","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"]
+    public static let revision="openai-standard-2026-09-23-v1"
+    public static let modernModels: Set<String>=["gpt-6-astra","gpt-6-sol","gpt-6-luna","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna"]
     public static let supportedModels=modernModels.union(["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.4-nano","gpt-5.3-codex","gpt-5.2","gpt-5.2-codex","gpt-5.1","gpt-5.1-codex","gpt-5.1-codex-max","gpt-5.1-codex-mini","gpt-5","gpt-5-codex","gpt-5-mini","gpt-5-nano"])
     public static var configData: Data {
         var overrides=[String:[String:Double]]()
-        for (model,input,cached,output) in [("gpt-6-astra",10.0,1.0,50.0),("gpt-5.6-sol",4.0,0.4,20.0),("gpt-5.6-terra",2.0,0.2,12.0),("gpt-5.6-luna",0.2,0.02,1.2)] {
+        for (model,input,cached,output) in [("gpt-6-astra",10.0,1.0,50.0),("gpt-6-sol",2.0,0.2,10.0),("gpt-6-luna",0.1,0.01,0.5),("gpt-5.6-sol",4.0,0.4,20.0),("gpt-5.6-terra",2.0,0.2,12.0),("gpt-5.6-luna",0.2,0.02,1.2)] {
             overrides[model]=["inputCostPerToken":input/1e6,"cacheReadInputTokenCost":cached/1e6,"cacheCreationInputTokenCost":input*1.25/1e6,"outputCostPerToken":output/1e6,"fastMultiplier":2,
                 // ccusage's old schema fixes its tier threshold at 200K; avoid applying it
                 // to these models, whose threshold is 272K. Such requests are gated below.

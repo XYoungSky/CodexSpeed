@@ -35,11 +35,15 @@ public final class CCUsageCompatibility {
 
         let cases: [(String, Int, Int, Double)] = [
             ("gpt-6-astra", 1000, 200, 0.0132),
+            ("gpt-6-sol", 1000, 200, 0.00264),
+            ("gpt-6-luna", 1000, 200, 0.000132),
             ("gpt-5.6-sol", 1000, 200, 0.00528),
             ("gpt-5.6-terra", 1000, 200, 0.00284),
             ("gpt-5.6-luna", 1000, 200, 0.000284),
             // Overrides must also hold above ccusage's legacy 200K tier boundary.
-            ("gpt-6-astra", 250_000, 50_000, 2.055)
+            ("gpt-6-astra", 250_000, 50_000, 2.055),
+            ("gpt-6-sol", 250_000, 50_000, 0.411),
+            ("gpt-6-luna", 250_000, 50_000, 0.02055)
         ]
         for (model, input, cached, cost) in cases {
             for (tier, multiplier) in [("default", 1.0), ("priority", 2.0)] {

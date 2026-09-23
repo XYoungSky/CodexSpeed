@@ -43,12 +43,12 @@ final class HUDModel: ObservableObject {
     func chooseHome() {
         let panel=NSOpenPanel(); panel.canChooseDirectories=true; panel.canChooseFiles=false; panel.showsHiddenFiles=true
         panel.title=text("Codex Folder", "Codex 目录"); panel.prompt=text("Select", "选择"); panel.message=text("Choose the folder containing sessions", "选择包含 sessions 的目录"); panel.directoryURL=URL(fileURLWithPath:home)
-        if panel.runModal() == .OK,let url=panel.url { UserDefaults.standard.set(url.path,forKey:"codexHome"); restart(); monitor.reset(); tick() }
+        if panel.runModal() == .OK,let url=panel.url,url.path != home { UserDefaults.standard.set(url.path,forKey:"codexHome"); restart(); monitor.reset(); tick() }
     }
     func chooseExecutable() {
         let panel=NSOpenPanel(); panel.canChooseDirectories=false; panel.canChooseFiles=true; panel.directoryURL=URL(fileURLWithPath:"/opt/homebrew/bin")
         panel.title=text("ccusage Executable", "ccusage 可执行文件"); panel.prompt=text("Select", "选择"); panel.message=text("Choose your ccusage executable", "选择 ccusage 可执行文件")
-        if panel.runModal() == .OK,let url=panel.url { UserDefaults.standard.set(url.path,forKey:"ccusage"); restart(); monitor.reset(); tick() }
+        if panel.runModal() == .OK,let url=panel.url,url.path != executable { UserDefaults.standard.set(url.path,forKey:"ccusage"); restart(); monitor.reset(); tick() }
     }
     func reset() { monitor.reset(); tick() }
 }

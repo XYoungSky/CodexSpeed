@@ -1,6 +1,6 @@
 # CodexSpeed
 
-Current version: **ver1.1.1**, adding cost estimates for GPT-6 Sol and GPT-6 Luna.
+Current version: **ver1.1.2**, fixing unexpected recalibration and stale cost display after a reset.
 
 [简体中文](README.md) | **English**
 

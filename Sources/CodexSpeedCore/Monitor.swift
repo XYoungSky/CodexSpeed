@@ -51,7 +51,12 @@ public final class Monitor {
     }
     public func stop() { worker.async { self.stopped=true; self.generation += 1 } }
     public func reset() {
-        worker.async { self.generation += 1; self.since=CostReport.dateString(Date()); self.state.calibrations=[:]; self.history=[:]; self.dirty=true; self.save() }
+        worker.async {
+            self.generation += 1; self.since=CostReport.dateString(Date())
+            self.state.calibrations=[:]; self.history=[:]
+            self.state.cost=nil; self.state.updated=nil; self.state.costError=nil; self.state.fallback=false
+            self.lastCost = .distantPast; self.dirty=true; self.save()
+        }
     }
     private func refresh() {
         state.error=nil
@@ -123,30 +128,16 @@ public final class Monitor {
         }
     }
     private func priceSignature() -> String {
-        // ccusage/LiteLLM cache locations vary by installation; fingerprint discovered pricing files.
-        let fm=FileManager.default
-        let candidates=[fm.homeDirectoryForCurrentUser.appendingPathComponent(".cache/ccusage"),fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/ccusage")]
+        // Pricing uses our explicit config and ccusage's offline catalog, not Codex settings.
         var entries=[String]()
         let resolved=URL(fileURLWithPath:executable).resolvingSymlinksInPath()
         let package=resolved.deletingLastPathComponent().deletingLastPathComponent()
         let explicitFiles=[resolved,package.appendingPathComponent("package.json"),
             package.appendingPathComponent("node_modules/@ccusage/ccusage-darwin-arm64/bin/ccusage"),
-            package.appendingPathComponent("node_modules/@ccusage/ccusage-darwin-x64/bin/ccusage"),
-            fm.homeDirectoryForCurrentUser.appendingPathComponent(".config/ccusage.json"),
-            fm.homeDirectoryForCurrentUser.appendingPathComponent(".claude/ccusage.json"),
-            home.appendingPathComponent("config.toml")]
+            package.appendingPathComponent("node_modules/@ccusage/ccusage-darwin-x64/bin/ccusage")]
         for file in explicitFiles {
             if let data=try? Data(contentsOf:file,options:.mappedIfSafe) {
                 entries.append(file.path+SHA256.hash(data:data).map { String(format:"%02x",$0) }.joined())
-            }
-        }
-        for root in candidates {
-            if let e=fm.enumerator(at:root,includingPropertiesForKeys:[.isRegularFileKey]) {
-                for case let url as URL in e {
-                    if let values=try? url.resourceValues(forKeys:[.isRegularFileKey]),values.isRegularFile == true, let data=try? Data(contentsOf:url) {
-                        entries.append(url.path+SHA256.hash(data:data).map { String(format:"%02x",$0) }.joined())
-                    }
-                }
             }
         }
         return entries.sorted().joined(separator:"|")

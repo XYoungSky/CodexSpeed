@@ -21,8 +21,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleName</key><string>CodexSpeed</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.1.1</string>
-<key>CFBundleVersion</key><string>3</string>
+<key>CFBundleShortVersionString</key><string>1.1.2</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
@@ -31,5 +31,9 @@ PLIST
 xattr -dr com.apple.FinderInfo "$APP" 2>/dev/null || true
 xattr -dr com.apple.ResourceFork "$APP" 2>/dev/null || true
 codesign --force --sign - "$APP"
+xattr -d com.apple.FinderInfo "$APP" 2>/dev/null || true
+xattr -d 'com.apple.fileprovider.fpfs#P' "$APP" 2>/dev/null || true
+codesign --verify --deep --strict "$APP"
+ditto -c -k --norsrc --keepParent "$APP" "$PWD/dist/CodexSpeed-ver1.1.2.zip"
 .build/release/CodexSpeed --export-pricing > dist/ccusage-pricing.json
 printf '%s\n' "$APP"

@@ -43,7 +43,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
             ("ccusage JSON", "Invalid ccusage report", "ccusage 报告格式异常"),
             ("ccusage 有用量", "Pricing unavailable", "价格数据不可用"),
             ("模型价格未验证", "Unverified model pricing", "模型价格尚未验证"),
-            ("检测到超过 272K", "Long-context pricing unavailable", "长上下文计价暂不可用"),
+            ("检测到不支持的长上下文", "Long-context pricing unavailable", "长上下文计价暂不可用"),
             ("ccusage 输出超过", "Usage report exceeds size limit", "用量报告超过大小限制"),
             ("ccusage 超时", "ccusage timed out", "ccusage 超时"),
             ("ccusage 执行失败", "ccusage failed", "ccusage 执行失败"),

@@ -1,6 +1,6 @@
 # CodexSpeed
 
-当前版本：**ver1.1.2**，修复费用估算的意外重校准和重置后旧费用短暂残留。
+当前版本：**ver1.2**，新增 GPT-6.1 Sol 支持和设置中的手动联网价格更新。
 
 **简体中文** | [English](README.en.md)
 
@@ -49,11 +49,13 @@ open dist/CodexSpeed.app
 - **校准条件**：至少 3 个有效快照、10 分钟跨度、5 个百分点消耗；重置或价格变化后重新采样。
 
 金额是 API 等价容量估算，**不是订阅余额或账单**。跨设备使用、日志缺失、模型价格和消耗权重都会影响结果。
-ccusage 以离线模式运行；价格快照位于 [Pricing.swift](Sources/CodexSpeedCore/Pricing.swift)，不会自动更新。
+ccusage 以离线模式运行；内置价格包含 GPT-6.1 Sol（输入 / 缓存输入 / 输出为每百万 Token $2 / $0.10 / $10），参考 [OpenAI 官方模型文档](https://developers.openai.com/api/docs/models/gpt-6.1-sol)。
+在设置中点击“联网更新模型价格…”可手动获取 [LiteLLM 公开价格表](https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json)，补充新 OpenAI GPT 模型并更新已知模型。仅点击按钮时联网，不上传日志；成功后保存本地缓存，失败保留原价格，价格变化后重新校准。社区价格表可能延迟收录新模型。
+Plus、Pro100、Pro200、Pro500 均使用日志中的实际额度窗口，无需选择会员档位。
 未知模型及不支持的长上下文计价会暂停校准。日志格式变化也可能影响兼容性。
 
 设置保存于 UserDefaults；校准记录位于
-`~/Library/Application Support/CodexSpeed/calibration.json`，不含对话正文。
+`~/Library/Application Support/CodexSpeed/calibration.json`，价格缓存为同目录的 `pricing.json`，不含对话正文。
 应用没有 App Sandbox，请仅配置可信的 ccusage 可执行文件。
 
 ## 开发

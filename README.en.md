@@ -1,6 +1,6 @@
 # CodexSpeed
 
-Current version: **ver1.1.2**, fixing unexpected recalibration and stale cost display after a reset.
+Current version: **ver1.2**, with GPT-6.1 Sol support and manual online price updates in Settings.
 
 [简体中文](README.md) | **English**
 
@@ -53,8 +53,10 @@ or open Settings. Click the menu bar icon to restore the floating window.
 
 Dollar amounts estimate API-equivalent capacity; **they are not a subscription balance or bill**.
 Usage on other devices, missing logs, model prices, and quota consumption weights can affect the results.
-ccusage runs offline with a pricing snapshot in [Pricing.swift](Sources/CodexSpeedCore/Pricing.swift);
-prices do not update automatically. Unknown models and unsupported long-context pricing pause calibration.
+ccusage runs offline with a built-in pricing snapshot including [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+Use Settings → **Update model prices online…** to manually download the public LiteLLM price table, update prices and add new OpenAI GPT models. Prices are cached in `~/Library/Application Support/CodexSpeed/pricing.json`; failed updates retain previous prices, and changed prices restart calibration. Only this button accesses the network, without sending logs. The community catalog may lag behind new releases.
+Plus, Pro100, Pro200 and Pro500 use the quota windows recorded in logs without requiring a plan selector.
+Prices do not update automatically. Unknown models and unsupported long-context pricing pause calibration.
 Changes to the log format may also affect compatibility.
 
 Settings are stored in UserDefaults. Calibration records are saved to

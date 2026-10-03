@@ -156,8 +156,8 @@ public final class RolloutParser {
         if ["token_count","token_usage_record"].contains(type), session.running {
             updateSpeed(at:date)
         }
-        if ["token_count","token_usage_record"].contains(type),Pricing.modernModels.contains(session.model),
-           let input=session.lastInput,input>272_000 { unsupportedPricingDate=date }
+        if ["token_count","token_usage_record"].contains(type),(Pricing.modernModels.contains(session.model) || (session.model.hasPrefix("gpt-") && !Pricing.supportedModels.contains(session.model))),
+           let input=session.lastInput,input > (Pricing.modernModels.contains(session.model) ? 272_000 : 200_000) { unsupportedPricingDate=date }
     }
     private func updateSpeed(at date: Date) {
         let output=session.usage.output

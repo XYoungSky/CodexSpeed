@@ -240,7 +240,7 @@ final class CoreTests {
         expectEqual(b.samples,1); expectEqual(b.limit.used,50); expectEqual(a.limit.used,40)
     }
     func testGPT6SolAndLunaContextBoundary() throws {
-        for model in ["gpt-6-sol","gpt-6-luna"] {
+        for model in ["gpt-6.1-sol","gpt-6-sol","gpt-6-luna"] {
             try Pricing.validate(JSONSerialization.data(withJSONObject:
                 ["daily":[["models":[model:["totalTokens":100]]]]]))
             for input in [272_000,272_001] {
@@ -255,6 +255,35 @@ final class CoreTests {
     func testUnknownModelIsRejected() {
         expectThrows(try Pricing.validate(Data(#"{"daily":[{"models":{"future-model":{"totalTokens":100}}}]}"#.utf8)))
     }
+    func testDownloadedPricing() throws {
+        let data=Data(#"{"gpt-future":{"litellm_provider":"openai","mode":"chat","input_cost_per_token":0.000002,"output_cost_per_token":0.00001,"cache_read_input_token_cost":0.0000001},"gpt-bad":{"litellm_provider":"openai","mode":"chat","input_cost_per_token":true,"output_cost_per_token":1},"gpt-other":{"litellm_provider":"azure","mode":"chat","input_cost_per_token":0.1,"output_cost_per_token":0.1}}"#.utf8)
+        let catalog=try PricingCatalog.parse(data)
+        expectEqual(catalog.overrides.count,1)
+        expectEqual(catalog.overrides["gpt-future"]?["cacheReadInputTokenCost"],0.0000001)
+        let report=Data(#"{"daily":[{"models":{"gpt-future":{"totalTokens":100}}}]}"#.utf8)
+        expectThrows(try Pricing.validate(report))
+        try Pricing.validate(report,catalog:catalog)
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let file=root.appendingPathComponent("pricing.json")
+        try catalog.save(to:file)
+        expectEqual(PricingCatalog.load(from:file).signature,catalog.signature)
+        expectEqual(catalog.signature == PricingCatalog().signature,false)
+        expectThrows(try PricingCatalog.parse(Data("{}".utf8)))
+        let p=RolloutParser()
+        p.consume(event("turn_context",["model":"gpt-future"]))
+        p.consume(event("token_count",["info":["last_token_usage":["input_tokens":200001]]]))
+        expectEqual(p.unsupportedPricingDate != nil,true)
+    }
+    func testMembershipPlans() {
+        for plan in ["plus","pro100","pro200","pro500"] {
+            let p=RolloutParser()
+            p.consume(event("token_count",["rate_limits":["plan_type":plan,"primary":["used_percent":25.0,"window_minutes":300.0,"resets_at":2000000000.0],"secondary":["used_percent":40.0,"window_minutes":10080.0,"resets_at":2000000000.0]]]))
+            expectEqual(p.limits.count,2)
+            expectEqual(p.limits.allSatisfy { $0.plan == plan },true)
+            expectEqual(p.limits.first { $0.minutes == 300 }?.remaining,75)
+        }
+    }
     // A fake CLI for exercising probe validation and cache invalidation, without subprocesses.
     func compatibilityReport(_ home: URL) throws -> [String: Any] {
         let data=try Data(contentsOf:home.appendingPathComponent("sessions/rollout-included.jsonl"))
@@ -264,7 +293,7 @@ final class CoreTests {
         let info=(lines[3]["payload"] as! [String:Any])["info"] as! [String:Any]
         let usage=info["total_token_usage"] as! [String:Int]
         let input=usage["input_tokens"]!, cached=usage["cached_input_tokens"]!
-        let prices=["gpt-6-astra":(10.0,1.0,50.0),"gpt-6-sol":(2.0,0.2,10.0),"gpt-6-luna":(0.1,0.01,0.5),"gpt-5.6-sol":(4.0,0.4,20.0),
+        let prices=["gpt-6-astra":(10.0,1.0,50.0),"gpt-6.1-sol":(2.0,0.1,10.0),"gpt-6-sol":(2.0,0.2,10.0),"gpt-6-luna":(0.1,0.01,0.5),"gpt-5.6-sol":(4.0,0.4,20.0),
                     "gpt-5.6-terra":(2.0,0.2,12.0),"gpt-5.6-luna":(0.2,0.02,1.2)]
         let (standard,cache,output)=prices[model]!
         let cost=(Double(input-cached)*standard+Double(cached)*cache+100*output)/1e6
@@ -283,11 +312,11 @@ final class CoreTests {
             return try JSONSerialization.data(withJSONObject:self.compatibilityReport(home))
         })
         try checker.verify(executable:"fixture",signature:"version-1")
-        expectEqual(calls,18)
+        expectEqual(calls,22)
         try checker.verify(executable:"fixture",signature:"version-1")
-        expectEqual(calls,18)
+        expectEqual(calls,22)
         try checker.verify(executable:"fixture",signature:"version-2")
-        expectEqual(calls,36)
+        expectEqual(calls,44)
         expectTrue(roots.allSatisfy { !FileManager.default.fileExists(atPath:$0.path) })
     }
     func testCompatibilityRejectsInvalidReports() throws {
@@ -358,7 +387,7 @@ final class CoreTests {
         try FileManager.default.createDirectory(at:sessions,withIntermediateDirectories:true)
         defer { try? FileManager.default.removeItem(at:root) }
         let tokens:[String:Any]=["input_tokens":1000,"cached_input_tokens":200,"output_tokens":100,"reasoning_output_tokens":20,"total_tokens":1100]
-        for (model,expected) in [("gpt-6-astra",0.0132),("gpt-6-sol",0.00264),("gpt-6-luna",0.000132),("gpt-5.6-sol",0.00528),("gpt-5.6-terra",0.00284),("gpt-5.6-luna",0.000284)] {
+        for (model,expected) in [("gpt-6.1-sol",0.00262),("gpt-6-astra",0.0132),("gpt-6-sol",0.00264),("gpt-6-luna",0.000132),("gpt-5.6-sol",0.00528),("gpt-5.6-terra",0.00284),("gpt-5.6-luna",0.000284)] {
             for (tier,multiplier) in [("default",1.0),("priority",2.0)] {
                 let lines=[event("session_meta",["id":"fixture","originator":"Codex Desktop","cli_version":"0.155.0","source":"vscode"]),
                     event("turn_context",["turn_id":"a","model":model]),
@@ -387,6 +416,22 @@ final class CoreTests {
         expectTrue(finished != nil)
         expectNil(finished?.costError)
         expectTrue(abs((finished?.cost ?? -1)-0.000568)<0.00000001)
+        // A downloaded model absent from the CLI catalog must get the explicit
+        // cached rate, including cache reads and Fast mode, after restarting.
+        let catalog=try PricingCatalog.parse(Data(#"{"gpt-future":{"litellm_provider":"openai","mode":"responses","input_cost_per_token":0.000002,"output_cost_per_token":0.00001,"cache_read_input_token_cost":0.0000001}}"#.utf8))
+        try catalog.save(to:root.appendingPathComponent("pricing.json"))
+        try currentLog.replacingOccurrences(of:"gpt-5.6-luna",with:"gpt-future").write(to:log,atomically:true,encoding:.utf8)
+        let downloadedMonitor=Monitor(home:root,executable:executable,storage:root.appendingPathComponent("downloaded-calibration.json"))
+        defer { downloadedMonitor.stop() }
+        var downloaded: MonitorSnapshot?
+        downloadedMonitor.tick { snapshot in
+            if snapshot.updated != nil || snapshot.costError != nil { downloaded=snapshot }
+        }
+        let downloadedDeadline=Date().addingTimeInterval(20)
+        while downloaded == nil && Date()<downloadedDeadline { RunLoop.current.run(until:Date().addingTimeInterval(0.01)) }
+        expectTrue(downloaded != nil)
+        expectNil(downloaded?.costError)
+        expectTrue(abs((downloaded?.cost ?? -1)-0.00524)<0.00000001)
     }
     func testQuotaExample() {
         var c=Calibration(limit:limit(30),cost:20,date:Date(timeIntervalSince1970:0))
@@ -491,12 +536,14 @@ tests.testLatestSnapshotRemovesSecondary(); print("PASS testLatestSnapshotRemove
 tests.testMissingPriceZeroCost(); print("PASS testMissingPriceZeroCost")
 tests.testIndependentWindows(); print("PASS testIndependentWindows")
 tests.testUnknownModelIsRejected(); print("PASS testUnknownModelIsRejected")
+try tests.testDownloadedPricing(); print("PASS testDownloadedPricing")
+tests.testMembershipPlans(); print("PASS testMembershipPlans")
 try tests.testCompatibilityCacheAndCleanup(); print("PASS testCompatibilityCacheAndCleanup")
 try tests.testCompatibilityRejectsInvalidReports(); print("PASS testCompatibilityRejectsInvalidReports")
 try tests.testCompatibilityDeadline(); print("PASS testCompatibilityDeadline")
 try tests.testGPT6SolAndLunaContextBoundary(); print("PASS testGPT6SolAndLunaContextBoundary")
 tests.testMalformedPricingReports(); print("PASS testMalformedPricingReports")
 try tests.testCCUsagePricingIntegration(); print("PASS testCCUsagePricingIntegration")
-print("34 checks; \(failures) failed assertions")
+print("36 checks; \(failures) failed assertions")
 if failures>0 { exit(1) }
 } }

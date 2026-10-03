@@ -23,6 +23,7 @@ public final class Monitor {
     private var dirty=true, costRunning=false
     private var state=MonitorSnapshot()
     private var since=CostReport.dateString(Date()), signature="", history: [String:Double]=[:]
+    private let catalog: PricingCatalog
     private let storage: URL
     private let worker=DispatchQueue(label:"CodexSpeed.logs",qos:.utility)
     private let costWorker=DispatchQueue(label:"CodexSpeed.cost",qos:.utility)
@@ -33,6 +34,7 @@ public final class Monitor {
     private var tickPending=false
     public init(home: URL, executable: String, storage: URL, now: @escaping () -> Date = Date.init) {
         self.home=home; self.executable=executable; self.storage=storage; self.now=now
+        catalog=PricingCatalog.load(from:storage.deletingLastPathComponent().appendingPathComponent("pricing.json"))
         if let data=try? Data(contentsOf:storage), let saved=try? JSONDecoder().decode(Saved.self,from:data) {
             since=saved.since; state.calibrations=saved.calibrations; signature=saved.signature; history=saved.history
         }
@@ -149,11 +151,11 @@ public final class Monitor {
         costWorker.async {
             let result: Result<(CostReport,String,[String:Double]),Error>=Result {
                 guard FileManager.default.isExecutableFile(atPath:executable) else { throw TelemetryError.message("找不到 ccusage；请在设置中指定可执行文件") }
-                guard !longContext else { throw TelemetryError.message("检测到超过 272K 的新模型请求；当前 ccusage 无法准确计价，暂停额度校准") }
+                guard !longContext else { throw TelemetryError.message("检测到不支持的长上下文请求；当前 ccusage 无法准确计价，暂停额度校准") }
                 let version=String(data:try CommandRunner.run(path:executable,arguments:["--version"],timeout:5),encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-                let sig=home.path+"|"+executable+"|"+version+"|"+Pricing.revision+"|"+self.priceSignature()
+                let sig=home.path+"|"+executable+"|"+version+"|"+Pricing.revision+"|"+self.catalog.signature+"|"+self.priceSignature()
                 try self.compatibility.verify(executable:executable,signature:sig)
-                let data=try Pricing.report(executable:executable,home:home,since:since)
+                let data=try Pricing.report(executable:executable,home:home,since:since,catalog:self.catalog)
                 let report=try CostReport.parse(data)
                 let d=try JSONSerialization.jsonObject(with:data) as? [String:Any]
                 var history=[String:Double]()

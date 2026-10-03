@@ -11,6 +11,12 @@ final class HUDModel: ObservableObject {
         didSet { UserDefaults.standard.set(compact,forKey:"compact") }
     }
     @Published var now=Date()
+    @Published var updatingPrices=false
+    @Published var priceMessage: String?
+    @Published var pricingUpdated: Date?
+    private var pricingURL: URL {
+        FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("CodexSpeed/pricing.json")
+    }
     @Published var theme=AppTheme(rawValue:UserDefaults.standard.string(forKey:"theme") ?? "system") ?? .system {
         didSet { UserDefaults.standard.set(theme.rawValue,forKey:"theme"); NSApp.appearance=theme.appearance }
     }
@@ -29,6 +35,7 @@ final class HUDModel: ObservableObject {
     init() { NSApp.appearance=theme.appearance; restart(); timer=Timer.scheduledTimer(withTimeInterval:1,repeats:true) { [weak self] _ in self?.tick() }; timer?.tolerance=0.2; tick() }
     private func restart() {
         monitor?.stop()
+        pricingUpdated=PricingCatalog.load(from:pricingURL).updated
         let storage=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("CodexSpeed/calibration.json")
         monitor=Monitor(home:URL(fileURLWithPath:home),executable:executable,storage:storage)
     }
@@ -51,6 +58,27 @@ final class HUDModel: ObservableObject {
         if panel.runModal() == .OK,let url=panel.url,url.path != executable { UserDefaults.standard.set(url.path,forKey:"ccusage"); restart(); monitor.reset(); tick() }
     }
     func reset() { monitor.reset(); tick() }
+    func updatePrices() {
+        guard !updatingPrices else { return }
+        updatingPrices=true
+        Task { @MainActor in
+            defer { updatingPrices=false }
+            do {
+                let catalog=try await PricingCatalog.download()
+                let previous=PricingCatalog.load(from:pricingURL)
+                try catalog.save(to:pricingURL)
+                if previous.signature != catalog.signature {
+                    restart(); monitor.reset()
+                    snapshot.calibrations=[:]; snapshot.cost=nil; snapshot.updated=nil
+                }
+                pricingUpdated=catalog.updated
+                priceMessage=text("Updated prices for \(catalog.overrides.count) models.", "已更新 \(catalog.overrides.count) 个模型的价格。")
+                tick()
+            } catch {
+                priceMessage=text("Price update failed. Previous prices retained. ", "价格更新失败，已保留原价格。")+error.localizedDescription
+            }
+        }
+    }
 }
 
 struct HUDView: View {
@@ -77,6 +105,9 @@ struct HUDView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .modifier(HUDSurface(style:model.background))
         .environment(\.locale, model.language.locale)
+        .alert(t("Model prices", "模型价格"), isPresented: Binding(get: { model.priceMessage != nil }, set: { if !$0 { model.priceMessage=nil } })) {
+            Button(t("OK", "确定")) { model.priceMessage=nil }
+        } message: { Text(model.priceMessage ?? "") }
     }
 
     private var fullView: some View {
@@ -203,6 +234,11 @@ struct HUDView: View {
                 Divider()
                 Button(t("Codex folder…", "Codex 目录…"), action: model.chooseHome)
                 Button(t("ccusage executable…", "ccusage 路径…"), action: model.chooseExecutable)
+                Button(t(model.updatingPrices ? "Updating prices…" : "Update model prices online…", model.updatingPrices ? "价格更新中…" : "联网更新模型价格…"), action: model.updatePrices)
+                    .disabled(model.updatingPrices)
+                if let date=model.pricingUpdated {
+                    Text(t("Prices updated: ", "价格更新于：")+model.language.timestamp(date))
+                }
                 Button(t("Recalibrate quota", "重新校准额度"), action: model.reset)
                 Divider()
                 Button(t("Quit CodexSpeed", "退出 CodexSpeed")) { NSApp.terminate(nil) }
